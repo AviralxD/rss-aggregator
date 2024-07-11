@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/AviralxD/rss-aggregator/internal/database"
 	"github.com/go-chi/chi"
@@ -21,6 +22,13 @@ type apiConfig struct {
 
 func main() {
 
+	feed, err := urlToFeed("https://wagslane.dev/index.xml")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(feed)
+
 	godotenv.Load(".env")
 
 	portName := os.Getenv("PORT")
@@ -33,14 +41,18 @@ func main() {
 		log.Fatal("DB_URL not found in the environment")
 	}
 
-	dbConn, err := sql.Open("postgres", dbURL)
+	Conn, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Can't connect to db:", err)
 	}
 
+	dbConn := database.New(Conn)
+
 	apiCfg := apiConfig{
-		DB: database.New(dbConn),
+		DB: dbConn,
 	}
+
+	go startScraping(dbConn, 10, time.Minute)
 
 	router := chi.NewRouter()
 
@@ -62,6 +74,10 @@ func main() {
 
 	v1Router.Post("/feeds", apiCfg.middlewareAuth(apiCfg.handlerCreateFeed))
 	v1Router.Get("/feeds", apiCfg.handlerGetFeeds)
+
+	v1Router.Post("/feed_follows", apiCfg.middlewareAuth(apiCfg.handlerCreateFeedFollow))
+	v1Router.Get("/feed_follows", apiCfg.middlewareAuth(apiCfg.handlerGetFeedFollows))
+	v1Router.Delete("/feed_follows/{feedFollowID}", apiCfg.middlewareAuth(apiCfg.handlerDeleteFeedFollow))
 
 	router.Mount("/v1", v1Router)
 
