@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -53,6 +54,7 @@ func scrapeFeed(db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
 		log.Println("Error fetching feed: ", err)
 		return
 	}
+
 	for _, item := range rssFeed.Channel.Item {
 
 		description := sql.NullString{}
@@ -76,7 +78,9 @@ func scrapeFeed(db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
 			Url:         item.Link,
 			FeedID:      feed.ID,
 		})
-		if err != nil {
+
+		e := errors.New("pq: duplicate key value violates unique constraint \"posts_url_key\"")
+		if err != nil && errors.Is(e, err) {
 			log.Printf("Failed to create post with error: %v", err)
 		}
 	}
